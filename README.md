@@ -39,4 +39,4 @@ PolyAPI.Polygons.Create(new[]
 ```
 ### Notes:
 - In case you wanna use the 'visible' parameter, you have to setup the Client API aswell.
-- ⚠️ It is not recommended to set more than 500 polygons to 'Visible' in prod environments as it **could** cause client performance issues.
+- ⚠️ It is not recommended to set more than 500 polygons to **Visible** in prod environments as it **could** cause client performance issues.

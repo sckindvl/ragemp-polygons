@@ -1,13 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Reflection;
 using System.Threading;
-using System.Threading.Tasks;
 using GTANetworkAPI;
-using Vector2 = System.Numerics.Vector2;
+using DummyEntity = GTANetworkAPI.DummyEntity;
+using Player = GTANetworkAPI.Player;
+using Vector3 = GTANetworkAPI.Vector3;
+using Vehicle = GTANetworkAPI.Vehicle;
 
-namespace PolyAPI
+namespace PolyAPI 
 {
     public enum PolygonEvent
     {
@@ -35,8 +38,8 @@ namespace PolyAPI
         public int LineAmount { get; set; }
         public uint[] LineColorRGBA { get; set; }
         internal DummyEntity Dummy { get; set; }
-        public Vector3 Center { get; private set; }
-        public float BoundingRadius { get; private set; }
+        public Vector2 Centroid { get; set; }
+        public float MaxRadius { get; set; }
 
         public void SetData(string key, object value) => Dummy?.SetData(key, value);
         public T GetData<T>(string key) => Dummy != null && Dummy.HasData(key) ? Dummy.GetData<T>(key) : default;
@@ -45,29 +48,13 @@ namespace PolyAPI
         public void SetSharedData(string key, object value) => Dummy?.SetSharedData(key, value);
         public T GetSharedData<T>(string key) => Dummy != null && Dummy.HasSharedData(key) ? Dummy.GetSharedData<T>(key) : default;
         public bool HasSharedData(string key) => Dummy != null && Dummy.HasSharedData(key);
-
-        public void RecalculateBounds(float extraRadius = 20f)
-        {
-            if (Vertices == null || Vertices.Length == 0) return;
-            Center = new Vector3(
-                Vertices.Average(v => v.X),
-                Vertices.Average(v => v.Y),
-                Vertices.Average(v => v.Z)
-            );
-            BoundingRadius = Vertices.Max(v =>
-                (float)Math.Sqrt(
-                    Math.Pow(v.X - Center.X, 2) +
-                    Math.Pow(v.Y - Center.Y, 2) +
-                    Math.Pow(v.Z - Center.Z, 2)
-                )
-            ) + extraRadius;
-        }
     }
 
     public static class Polygons
     {
         static Polygons() => RegisterRageEventHandlers();
 
+        private static readonly object PoolLock = new object();
         public static List<Polygon> Pool { get; } = new List<Polygon>();
         private static int _lastId;
 
@@ -85,6 +72,17 @@ namespace PolyAPI
         public static Polygon Create(Vector3[] vertices, float height, uint dimension = 0, bool visible = false, bool drawBox = false, int lineAmount = 10, uint[] lineColorRGBA = null)
         {
             var dummy = NAPI.DummyEntity.CreateDummyEntity(0, new Dictionary<string, object>(), dimension);
+            
+            var centroid = new Vector2(
+                vertices.Average(v => v.X),
+                vertices.Average(v => v.Y)
+            );
+            var maxRadius2D = vertices
+                    .Select(v => Vector2.Distance(
+                        new Vector2(v.X, v.Y),
+                        new Vector2(centroid.X, centroid.Y)))
+                    .Max();
+            
             var poly = new Polygon
             {
                 Id = Interlocked.Increment(ref _lastId),
@@ -95,10 +93,14 @@ namespace PolyAPI
                 DrawBox = drawBox,
                 LineAmount = lineAmount,
                 LineColorRGBA = lineColorRGBA ?? new uint[] { 255, 255, 255, 255 },
-                Dummy = dummy
+                Dummy = dummy,
+                Centroid = centroid,
+                MaxRadius = maxRadius2D
             };
-            poly.RecalculateBounds(20f);
-            Pool.Add(poly);
+            lock (PoolLock)
+            {
+                Pool.Add(poly);
+            }
             return poly;
         }
 
@@ -109,13 +111,33 @@ namespace PolyAPI
                 poly.Dummy.Delete();
                 poly.Dummy = null;
             }
-            Pool.Remove(poly);
+            lock (PoolLock)
+            {
+                Pool.Remove(poly);
+            }
         }
 
         public static void Tick()
         {
-            UpdateEntities(NAPI.Pools.GetAllPlayers(), PlayerState, PlayerEnter, PlayerLeave, p => p.Position, p => p.Dimension);
-            UpdateEntities(NAPI.Pools.GetAllVehicles(), VehicleState, VehicleEnter, VehicleLeave, v => v.Position, v => v.Dimension);
+            lock (PoolLock)
+            {
+                UpdateEntities(NAPI.Pools.GetAllPlayers(), PlayerState, PlayerEnter, PlayerLeave, p => p.Position, p => p.Dimension);
+                UpdateEntities(NAPI.Pools.GetAllVehicles(), VehicleState, VehicleEnter, VehicleLeave, v => v.Position, v => v.Dimension);
+            }
+        }
+        
+        public static void TickWithLog()
+        {
+            lock (PoolLock)
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+
+                UpdateEntities(NAPI.Pools.GetAllPlayers(), PlayerState, PlayerEnter, PlayerLeave, p => p.Position, p => p.Dimension);
+                UpdateEntities(NAPI.Pools.GetAllVehicles(), VehicleState, VehicleEnter, VehicleLeave, v => v.Position, v => v.Dimension);
+
+                sw.Stop();
+                Console.WriteLine($"Polygons.Tick: {sw.ElapsedMilliseconds} ms");
+            }
         }
 
         private static void UpdateEntities<T>(
@@ -158,24 +180,26 @@ namespace PolyAPI
             if (dimension != poly.Dimension)
                 return false;
 
-            var dx = pos.X - poly.Center.X;
-            var dy = pos.Y - poly.Center.Y;
-            var dz = pos.Z - poly.Center.Z;
-            var dist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-            if (dist > poly.BoundingRadius)
+            var dx = pos.X - poly.Centroid.X;
+            var dy = pos.Y - poly.Centroid.Y;
+            if (dx*dx + dy*dy > poly.MaxRadius * poly.MaxRadius)
                 return false;
 
             var vertices = poly.Vertices;
-            var zValid = vertices.Any(v => pos.Z >= v.Z && pos.Z <= v.Z + poly.Height);
-            var angleSum = GetAngleSum(pos, vertices) >= 5.8;
 
-            if (!(zValid || angleSum))
+            var minZ = vertices.Min(v => v.Z);
+            var maxZ = minZ + poly.Height;
+            var zValid = pos.Z >= minZ && pos.Z <= maxZ;
+
+            var angleOk = GetAngleSum(pos, vertices) >= 2 * Math.PI - 1e-3;
+
+            if (!(zValid || angleOk))
                 return false;
 
             var poly2D = vertices.Select(v => new Vector2(v.X, v.Y)).ToArray();
             return PointInPoly(new Vector2(pos.X, pos.Y), poly2D);
         }
-
+        
         private static bool PointInPoly(Vector2 point, Vector2[] poly)
         {
             bool inside = false;
@@ -243,9 +267,16 @@ namespace PolyAPI
         private const int CheckInterval = 100;
 
         [ServerEvent(Event.ResourceStart)]
-        public void OnResourceStart()
+        public static void OnResourceStart()
         {
-            NAPI.Task.Run(() => Polygons.Tick(), CheckInterval);
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                while (true)
+                {
+                    System.Threading.Tasks.Task.Delay(TimeSpan.FromMilliseconds(CheckInterval)).Wait();
+                    Polygons.Tick();
+                }
+            });
         }
 
         [ServerEvent(Event.PlayerConnected)]
@@ -265,8 +296,9 @@ namespace PolyAPI
                     lineColorRGBA = p.LineColorRGBA
                 })
                 .ToList();
-            var json = NAPI.Util.ToJson(list);
-            NAPI.ClientEvent.TriggerClientEvent(player, "Polygons:API:init", json);
+            
+            foreach (var p in list)
+                NAPI.ClientEvent.TriggerClientEvent(player, "Polygons:API:add", NAPI.Util.ToJson(p));
         }
     }
 }

@@ -1,20 +1,27 @@
 const polygons = []
 
 const polygonsAPI = {
-    init: (json) => {
-        const data = JSON.parse(json)
+    add: (json) => {
+        const poly = typeof json === 'string' ? JSON.parse(json) : json
+        polygons.push(poly)
+    },
+    remove: (id) => {
+        const idx = polygons.findIndex(p => p.id === id)
+        if (idx !== -1) polygons.splice(idx, 1)
+    },
+    clear: () => {
         polygons.length = 0
-        polygons.push(...data)
     }
 }
 
 if (typeof mp !== "undefined") {
     const api = {
-        "Polygons:API:init": polygonsAPI.init
-    };
-
+        "Polygons:API:add": polygonsAPI.add,
+        "Polygons:API:remove": polygonsAPI.remove,
+        "Polygons:API:clear": polygonsAPI.clear
+    }
     for (const fn in api) {
-        mp.events.add(fn, api[fn]);
+        mp.events.add(fn, api[fn])
     }
 }
 
@@ -33,7 +40,7 @@ mp.events.add('render', () => {
 
         p.vertices.forEach((v, i) => {
             const next = i === p.vertices.length - 1 ? p.vertices[0] : p.vertices[i + 1]
-            mp.game.graphics.drawLine(v.x, v.y, v.z, next.x, next.y, next.z,  color[0], color[1], color[2], color[3])
+            mp.game.graphics.drawLine(v.x, v.y, v.z, next.x, next.y, next.z, color[0], color[1], color[2], color[3])
         })
         p.vertices.forEach((v, i) => {
             const next = i === p.vertices.length - 1 ? p.vertices[0] : p.vertices[i + 1]

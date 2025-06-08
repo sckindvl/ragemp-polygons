@@ -37,5 +37,6 @@ PolyAPI.Polygons.Create(new[]
     new Vector3(0, 20, 70),
 }, 20, visible: true);
 ```
-### Note:
-#### In case you wanna use the 'Visible' parameter, you have to setup the Client API aswell.
+### Notes:
+- In case you wanna use the 'visible' parameter, you have to setup the Client API aswell.
+- ⚠️ It is not recommended to set more than 500 polygons to 'Visible' in prod environments as it **could** cause client performance issues.

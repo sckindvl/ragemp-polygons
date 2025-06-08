@@ -4,6 +4,7 @@
 ### Example usage:
 ```cs
 # Events
+
 [Polygon(PolygonEvent.OnPlayerEnter)]
 public static void PlayerEnter(Player player, Polygon poly)
 {

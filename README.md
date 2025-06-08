@@ -26,15 +26,6 @@ public static void VehicleLeave(Vehicle vehicle, Polygon poly)
 {
     Console.WriteLine("Vehicle " + vehicle.DisplayName + " left a polygon.");
 }
-
-# Create a polygon
-PolyAPI.Polygons.Create(new[]
-{
-    new Vector3(0, 0, 70),
-    new Vector3(20, 0, 70),
-    new Vector3(20, 20, 70),
-    new Vector3(0, 20, 70),
-}, 20, visible: true);
 ```
 ### Create a polygon
 ```cs

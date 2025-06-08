@@ -1,5 +1,5 @@
 # Serverside Polygons API for RAGE Multiplayer 1.1+
-### This resource adds the ability to create Polygons on Server. These Polygons are tracking Player and vehicle entities and can be used as an alternative for better shaped Colshapes.
+### This resource provides the ability to create polygons on the server. These polygons tracking player and vehicle entities and can be used to create better shapes, which colshapes are not capable of.
 
 ### Registerable Events
 ```cs

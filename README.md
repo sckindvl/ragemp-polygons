@@ -49,3 +49,5 @@ public static void VehicleLeave(Vehicle vehicle, Polygon poly)
 }
 
 ```
+
+* Special thanks to [FatCatTuxedo](https://github.com/fatcattuxedo) for sharing the Typescript file

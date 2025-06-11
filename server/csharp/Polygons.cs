@@ -44,10 +44,6 @@ namespace PolyAPI
         public void SetData(string key, object value) => Dummy?.SetData(key, value);
         public T GetData<T>(string key) => Dummy != null && Dummy.HasData(key) ? Dummy.GetData<T>(key) : default;
         public bool HasData(string key) => Dummy != null && Dummy.HasData(key);
-
-        public void SetSharedData(string key, object value) => Dummy?.SetSharedData(key, value);
-        public T GetSharedData<T>(string key) => Dummy != null && Dummy.HasSharedData(key) ? Dummy.GetSharedData<T>(key) : default;
-        public bool HasSharedData(string key) => Dummy != null && Dummy.HasSharedData(key);
     }
 
     public static class Polygons
@@ -102,6 +98,21 @@ namespace PolyAPI
                 Pool.Add(poly);
             }
             return poly;
+        }
+
+        public static Polygon CreateCircle(Vector3 center, float radius, float height, uint dimension = 0, bool visible = false, bool drawBox = false, uint[] lineColorRGBA = null)
+        {
+            int lineAmount = 16;
+            var vertices = new Vector3[lineAmount];
+            for (int i = 0; i < lineAmount; i++)
+            {
+                double angle = 2 * Math.PI * i / lineAmount;
+                float x = center.X + (float)(radius * Math.Cos(angle));
+                float y = center.Y + (float)(radius * Math.Sin(angle));
+                float z = center.Z;
+                vertices[i] = new Vector3(x, y, z);
+            }
+            return Create(vertices, height, dimension, visible, drawBox, lineAmount, lineColorRGBA);
         }
 
         public static void Destroy(Polygon poly)
